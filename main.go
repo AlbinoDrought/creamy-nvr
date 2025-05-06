@@ -188,6 +188,7 @@ func sizeOfDir(path string) (int64, error) {
 func main() {
 	// todo: store segments to tmpfs
 	// todo: compress and migrate segments from local to remote storage
+	// todo: if stream is healthy but becomes unhealthy, restart stream - but also determine why unhealthy!
 
 	logger.SetFormatter(&logrus.JSONFormatter{})
 

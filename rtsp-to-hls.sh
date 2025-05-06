@@ -17,7 +17,7 @@ mkdir -p "media/$NAME/stream/segments" # stream directory is 100% temporary and 
 mkdir -p "media/$NAME/archive" # archive directory is more permanent, should only remove old files
 
 HLS_TIME=${HLS_TIME:-5} # 5 seconds, inherent delay, each streamed chunk will be this long
-HLS_LIST_SIZE=${HLS_LIST_SIZE:-1000}  # keep this many chunks of the above duration
+HLS_LIST_SIZE=${HLS_LIST_SIZE:-360}  # keep this many chunks of the above duration
 SEGMENT_TIME=${SEGMENT_TIME:-300} # 5 minutes, collate chunks into archives of this length
 SEGMENT_WRAP=${SEGMENT_WRAP:-864} # 3 days, keep this many of the above segments
 
