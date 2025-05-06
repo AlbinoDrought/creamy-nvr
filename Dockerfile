@@ -25,7 +25,7 @@ ENV CGO_ENABLED=0 \
 RUN make creamy-nvr && mv creamy-nvr /creamy-nvr
 
 # Lightweight Runtime Env
-FROM alpine:3.14
+FROM jrottenberg/ffmpeg:7.1-alpine320
 RUN apk add --no-cache tini
 COPY --from=builder /creamy-nvr /creamy-nvr
 ENTRYPOINT ["tini", "--"]
