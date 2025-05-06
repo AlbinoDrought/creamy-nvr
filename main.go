@@ -491,67 +491,69 @@ func main() {
 		streamIdxMap[streams[i].Input.ID] = i
 	}
 
-	for _, input := range config.Inputs {
-		err := filepath.Walk(input.RecordingDirectory(), func(fpath string, info fs.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if !strings.HasSuffix(fpath, ".mp4") || !strings.Contains(fpath, input.ID) {
+	go func() {
+		for _, input := range config.Inputs {
+			err := filepath.Walk(input.RecordingDirectory(), func(fpath string, info fs.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if !strings.HasSuffix(fpath, ".mp4") || !strings.Contains(fpath, input.ID) {
+					return nil
+				}
+
+				recordingDate, err := parseRecordingTime(fpath)
+				if err != nil {
+					return fmt.Errorf("failed to parse time from path %v: %v", fpath, err)
+				}
+
+				ctx, cancel := context.WithTimeout(ctx, time.Minute)
+				defer cancel()
+				ffprobe := exec.CommandContext(
+					ctx,
+					"ffprobe", fpath,
+					"-v", "quiet",
+					"-of", "json",
+					"-show_entries", "format",
+				)
+				data, err := ffprobe.Output()
+				if err != nil {
+					logger.WithError(err).WithField("path", fpath).Warn("failed to run ffprobe on old recording, will not appear in UI, ignoring")
+					// partial recordings cause exit code 1. ignore those and keep going.
+					return nil
+				}
+				type ffprobeOutput struct {
+					Format struct {
+						Duration string `json:"duration"`
+					} `json:"format"`
+				}
+				var parsed ffprobeOutput
+				if err := json.Unmarshal(data, &parsed); err != nil {
+					return fmt.Errorf("failed to parse ffprobe output %v: %v", string(data), err)
+				}
+				duration, err := strconv.ParseFloat(parsed.Format.Duration, 64)
+				if err != nil {
+					return fmt.Errorf("failed to parse ffprobe output duration %v: %v", parsed.Format.Duration, err)
+				}
+				durationI := int(duration)
+				end := recordingDate.Add(time.Second * time.Duration(durationI))
+
+				saveRecording <- Recording{
+					ID:      path.Base(fpath),
+					InputID: input.ID,
+					Start:   recordingDate,
+					End:     end,
+					Path:    fpath, // todo: make into subdir
+				}
+				logger.WithField("unit", "recordings-loader").WithField("input", input.ID).Debug("loaded recording")
+
 				return nil
-			}
-
-			recordingDate, err := parseRecordingTime(fpath)
+			})
+			sortRecording <- true
 			if err != nil {
-				return fmt.Errorf("failed to parse time from path %v: %v", fpath, err)
+				logger.WithError(err).WithField("input", input.ID).Warn("failed to parse old recordings, ignoring")
 			}
-
-			ctx, cancel := context.WithTimeout(ctx, time.Minute)
-			defer cancel()
-			ffprobe := exec.CommandContext(
-				ctx,
-				"ffprobe", fpath,
-				"-v", "quiet",
-				"-of", "json",
-				"-show_entries", "format",
-			)
-			data, err := ffprobe.Output()
-			if err != nil {
-				logger.WithError(err).WithField("path", fpath).Warn("failed to run ffprobe on old recording, will not appear in UI, ignoring")
-				// partial recordings cause exit code 1. ignore those and keep going.
-				return nil
-			}
-			type ffprobeOutput struct {
-				Format struct {
-					Duration string `json:"duration"`
-				} `json:"format"`
-			}
-			var parsed ffprobeOutput
-			if err := json.Unmarshal(data, &parsed); err != nil {
-				return fmt.Errorf("failed to parse ffprobe output %v: %v", string(data), err)
-			}
-			duration, err := strconv.ParseFloat(parsed.Format.Duration, 64)
-			if err != nil {
-				return fmt.Errorf("failed to parse ffprobe output duration %v: %v", parsed.Format.Duration, err)
-			}
-			durationI := int(duration)
-			end := recordingDate.Add(time.Second * time.Duration(durationI))
-
-			saveRecording <- Recording{
-				ID:      path.Base(fpath),
-				InputID: input.ID,
-				Start:   recordingDate,
-				End:     end,
-				Path:    fpath, // todo: make into subdir
-			}
-			logger.WithField("unit", "recordings-loader").WithField("input", input.ID).Debug("loaded recording")
-
-			return nil
-		})
-		sortRecording <- true
-		if err != nil {
-			logger.WithError(err).WithField("input", input.ID).Warn("failed to parse old recordings, ignoring")
 		}
-	}
+	}()
 
 	go func() {
 		timer := time.NewTimer(30 * time.Second)
