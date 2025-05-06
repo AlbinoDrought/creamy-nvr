@@ -1,0 +1,108 @@
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 196 75% 49%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 14% 13%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 195.9 84.7% 38.4%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-gray-100 text-foreground;
+  }
+  
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2 text-sidebar-foreground hover:bg-sidebar-primary/20 rounded-md transition-colors;
+  }
+  
+  .sidebar-link.router-link-exact-active {
+    @apply bg-sidebar-primary text-white;
+  }
+  
+  .search-input {
+    @apply bg-white border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-nvrblue;
+  }
+  
+  .nvr-button {
+    @apply bg-nvrblue text-white px-3 py-1 rounded text-xs uppercase font-medium hover:bg-nvrblue/90 transition-colors;
+  }
+  
+  .nvr-tab {
+    @apply px-4 py-2 border-b-2 border-transparent hover:border-nvrblue transition-colors;
+  }
+  
+  .nvr-tab.active {
+    @apply border-nvrblue text-nvrblue;
+  }
+  
+  .nvr-badge {
+    @apply bg-green-500 text-white text-xs px-2 py-0.5 rounded-full;
+  }
+  
+  .nvr-table {
+    @apply w-full border-collapse;
+  }
+  
+  .nvr-table th {
+    @apply text-left py-3 px-4 border-b border-gray-200 font-medium text-gray-700 uppercase text-xs;
+  }
+  
+  .nvr-table td {
+    @apply py-3 px-4 border-b border-gray-100;
+  }
+  
+  .nvr-table tr:hover {
+    @apply bg-gray-50;
+  }
+}
+
+
+.sidebar {
+  min-height: calc(100vh - calc(var(--spacing) * 10));
+}
