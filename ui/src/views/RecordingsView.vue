@@ -107,12 +107,12 @@ const viewRecording = (recording: types.Recording) => {
       </div>
       
       <div class="p-4 bg-gray-100 flex justify-end gap-2">
-        <button class="nvr-button bg-blue-500 flex items-center gap-2 py-2">
+        <a class="nvr-button bg-blue-500 flex items-center gap-2 py-2" :href="data.viewing.path" download>
           ⬇️ DOWNLOAD
-        </button>
-        <button class="border border-gray-300 px-4 py-2 rounded flex items-center gap-2 text-sm">
+        </a>
+        <!-- <button class="border border-gray-300 px-4 py-2 rounded flex items-center gap-2 text-sm">
           🗑️ DELETE
-        </button>
+        </button> -->
       </div>
     </div>
   </div>
