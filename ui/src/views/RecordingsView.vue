@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { reactive } from 'vue';
-import { Calendar, Search } from 'lucide-vue-next';
+import { useRouter } from 'vue-router';
 import { useStreamStore } from '@/stores/stream';
 import * as types from '@/stores/streamTypes';
+
+const router = useRouter();
 
 const streamStore = useStreamStore();
 
@@ -18,8 +20,6 @@ const data = reactive({
   // selectedCamera: null,
 
   // selectedRecordings: [],
-
-  viewing: null as null|types.Recording,
 });
 
 // const search = () => {
@@ -27,7 +27,12 @@ const data = reactive({
 // };
 
 const viewRecording = (recording: types.Recording) => {
-  data.viewing = recording;
+  router.push({
+    name: 'recording',
+    params: {
+      recording: recording.id,
+    }, 
+  });
 };
 
 // const handleSelectRecording = (e: Event, r: unknown) => {
@@ -36,87 +41,7 @@ const viewRecording = (recording: types.Recording) => {
 </script>
 
 <template>
-  <div v-if="data.viewing" class="h-full flex flex-col">
-    <div class="relative h-full flex flex-col">
-      <div class="absolute top-4 right-4 z-10">
-        <button @click.prevent="data.viewing = null" class="bg-gray-900 text-white p-2 rounded cursor-pointer">
-          ✕
-        </button>
-      </div>
-      
-      <div class="flex-1 bg-gray-700 flex items-center justify-center">
-        <div class="w-full h-full flex items-center justify-center bg-gray-700">
-          <video
-            style="max-height: 80vh"
-            :src="data.viewing.path"
-            muted
-            controls
-            autoplay
-          />
-        </div>
-      </div>
-      
-      <!-- <div class="h-16 bg-gray-800 flex items-center justify-between px-4">
-        <div class="flex items-center gap-4">
-          <button class="text-white">
-            ⏸️
-          </button>
-          <button class="text-white">
-            🔇
-          </button>
-          <div class="flex items-center text-white gap-1">
-            <span>00:22</span>
-            <span>/</span>
-            <span>04:12</span>
-          </div>
-          <div class="w-64 h-1 bg-gray-600 rounded-full overflow-hidden">
-            <div class="w-1/4 h-full bg-nvrblue"></div>
-          </div>
-        </div>
-        
-        <div class="flex items-center gap-2">
-          <button class="text-white">
-            📺
-          </button>
-        </div>
-      </div> -->
-      
-      <div class="bg-gray-900 text-white p-4">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-medium">Info</h3>
-          <button>▼</button>
-        </div>
-        
-        <div class="grid grid-cols-2 gap-y-2 mt-4">
-          <div>Stream</div>
-          <div class="text-right">{{ data.viewing.stream_name }}</div>
-          
-          <div>Date/Time</div>
-          <div class="text-right">{{ (new Date(data.viewing.start)).toLocaleString() }}</div>
-          
-          <div>Duration</div>
-          <div class="text-right">{{ Math.round(((new Date(data.viewing.end)).getTime() - (new Date(data.viewing.start)).getTime()) / (1000 * 60)) }} minutes</div>
-          
-<!--           
-          <div>Unlocked</div>
-          <div class="text-right flex items-center justify-end">
-            <div class="h-6 w-6 rounded bg-gray-700 mr-1"></div>
-            <button class="h-6 w-6 rounded bg-gray-700">🔓</button>
-          </div> -->
-        </div>
-      </div>
-      
-      <div class="p-4 bg-gray-100 flex justify-end gap-2">
-        <a class="nvr-button bg-blue-500 flex items-center gap-2 py-2" :href="data.viewing.path" download>
-          ⬇️ DOWNLOAD
-        </a>
-        <!-- <button class="border border-gray-300 px-4 py-2 rounded flex items-center gap-2 text-sm">
-          🗑️ DELETE
-        </button> -->
-      </div>
-    </div>
-  </div>
-  <div v-else class="h-full flex">
+  <div class="h-full flex">
     <!-- <div class="w-80 bg-gray-100 border-r border-gray-200 p-4 flex flex-col gap-6">
       <div>
         <h2 class="font-medium mb-3">DATE RANGE</h2>

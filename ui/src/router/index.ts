@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import CamerasView from '@/views/CamerasView.vue'
 import RecordingsView from '@/views/RecordingsView.vue';
+import RecordingView from '@/views/RecordingView.vue';
 import LiveView from '@/views/LiveView.vue';
 
 const router = createRouter({
@@ -19,6 +20,12 @@ const router = createRouter({
       path: '/recordings',
       name: 'recordings',
       component: RecordingsView,
+    },
+    {
+      path: '/recordings/:recording',
+      name: 'recording',
+      component: RecordingView,
+      props: true,
     },
     {
       path: '/live-view',
