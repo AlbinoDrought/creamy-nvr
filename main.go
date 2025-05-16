@@ -141,8 +141,13 @@ type Stream struct {
 
 	// LastRestartInErr is set on a schedule. If true, it indicates LastRestart is less than five minutes ago (= the stream-capturing command could be crashlooping)
 	LastRestartInErr AValue[bool]
-	// LastFileOpenedInErr is set on a schedule. If true, it indicates LastFileOpened is less than three minutes ago (= the stream-capturing command could be frozen or not recording)
+	// LastFileOpenedInErr is set on a schedule. If true, it indicates LastFileOpened is more than three minutes ago (= the stream-capturing command could be frozen or not recording)
 	LastFileOpenedInErr AValue[bool]
+	// LastSegmentOpenedInErr is set on a schedule. If true, it indicates LastSegmentOpened is more than 15 minutes ago (= the stream-capturing command could be frozen or not recording)
+	LastSegmentOpenedInErr AValue[bool]
+
+	// RestartRecording can be invoked to stop and restart the rtsp-to-hls.sh process
+	RestartRecording AValue[func()]
 }
 
 type Recording struct {
@@ -188,7 +193,6 @@ func sizeOfDir(path string) (int64, error) {
 func main() {
 	// todo: store segments to tmpfs
 	// todo: compress and migrate segments from local to remote storage
-	// todo: if stream is healthy but becomes unhealthy, restart stream - but also determine why unhealthy!
 
 	logger.SetFormatter(&logrus.JSONFormatter{})
 
@@ -500,6 +504,7 @@ func main() {
 		streams[i].LastSegmentClosed.Store(time.Date(1995, 7, 17, 0, 1, 2, 3, time.Local))
 		streams[i].LastErr.Store(errors.New("empty"))
 		streams[i].LastFileOpenedInErr.Store(true)
+		streams[i].LastSegmentOpenedInErr.Store(true)
 		streams[i].LastRestartInErr.Store(true)
 		go record(ctx, &streams[i])
 	}
@@ -597,13 +602,32 @@ func main() {
 					lastFileOpenedCurrentlyInErr := stream.LastFileOpenedInErr.Load()
 
 					if lastFileOpenedInErr && !lastFileOpenedCurrentlyInErr {
-						logger.WithField("last-open", lastFileOpened).Warn("stream has not opened file for at least 3 minutes")
+						logger.WithField("last-open", lastFileOpened).Warn("stream has not opened file for at least 3 minutes, restarting")
+						restart := stream.RestartRecording.Load()
+						if restart != nil {
+							restart()
+						}
 					} else if !lastFileOpenedInErr && lastFileOpenedCurrentlyInErr {
 						logger.WithField("last-open", lastFileOpened).Info("stream has opened a file in the last 3 minutes")
 					}
 
+					lastSegmentOpened := stream.LastSegmentOpened.Load()
+					lastSegmentOpenedInErr := time.Since(lastSegmentOpened) > 15*time.Minute
+					lastSegmentOpenedCurrentlyInErr := stream.LastSegmentOpenedInErr.Load()
+
+					if lastSegmentOpenedInErr && !lastSegmentOpenedCurrentlyInErr {
+						logger.WithField("last-open", lastSegmentOpened).Warn("stream has not opened segment for at least 15 minutes, restarting")
+						restart := stream.RestartRecording.Load()
+						if restart != nil {
+							restart()
+						}
+					} else if !lastSegmentOpenedInErr && lastSegmentOpenedCurrentlyInErr {
+						logger.WithField("last-open", lastSegmentOpened).Info("stream has opened a segment in the last 15 minutes")
+					}
+
 					stream.LastRestartInErr.Store(lastRestartInErr)
 					stream.LastFileOpenedInErr.Store(lastFileOpenedInErr)
+					stream.LastSegmentOpenedInErr.Store(lastSegmentOpenedInErr)
 				}
 				timer.Reset(time.Minute)
 			}
@@ -622,7 +646,7 @@ func main() {
 			apiStreams[i].ID = streams[i].Input.ID
 			apiStreams[i].Name = streams[i].Input.Name
 			apiStreams[i].Active = streams[i].Active.Load()
-			apiStreams[i].InErr = !apiStreams[i].Active || streams[i].LastFileOpenedInErr.Load() || streams[i].LastRestartInErr.Load()
+			apiStreams[i].InErr = !apiStreams[i].Active || streams[i].LastFileOpenedInErr.Load() || streams[i].LastSegmentOpenedInErr.Load() || streams[i].LastRestartInErr.Load()
 			apiStreams[i].LastRecording = streams[i].LastSegmentClosed.Load().Format(time.RFC3339)
 			apiStreams[i].Source = fmt.Sprintf("/media/%v/stream/%v.m3u8", streams[i].Input.ID, streams[i].Input.ID)
 		}
@@ -750,6 +774,14 @@ func record(ctx context.Context, stream *Stream) {
 			parentWarn: loggerWarn,
 			parentInfo: loggerInfo,
 		}
+		var cmdRestartLock sync.Mutex
+		stream.RestartRecording.Store(func() {
+			cmdRestartLock.Lock()
+			defer cmdRestartLock.Unlock()
+			if cmd.Process != nil {
+				cmd.Process.Kill()
+			}
+		})
 		return cmd
 	}
 
