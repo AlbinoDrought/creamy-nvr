@@ -236,6 +236,18 @@ func main() {
 	saveRecording := make(chan Recording)
 	sortRecording := make(chan bool)
 
+	removeRecordingFromMem := func(path string) {
+		recordingsLock.Lock()
+		defer recordingsLock.Unlock()
+
+		for i, r := range recordings {
+			if r.Path == path {
+				recordings = append(recordings[:i], recordings[i+1:]...)
+				break
+			}
+		}
+	}
+
 	pruneLock := sync.Mutex{}
 	prune := func() {
 		pruneLock.Lock()
@@ -273,6 +285,8 @@ func main() {
 					}
 					logger.WithField("path", path).WithField("input", input.ID).Debug("pruned recording due to date")
 
+					removeRecordingFromMem(path)
+
 					return nil
 				})
 				if err != nil {
@@ -308,6 +322,9 @@ func main() {
 						}
 						logger.WithField("path", path).WithField("input", input.ID).Debug("pruned recording due to size")
 						newSize -= recordingSize
+
+						removeRecordingFromMem(path)
+
 						return nil
 					})
 					if err != nil {
