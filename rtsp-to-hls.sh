@@ -15,6 +15,7 @@ NAME=${RTSP_NAME:-cctv}
 # ffmpeg doesn't autocreate directories
 mkdir -p "media/$NAME/stream/segments" # stream directory is 100% temporary and can be removed for cleaning
 mkdir -p "media/$NAME/archive" # archive directory is more permanent, should only remove old files
+rm -f "media/$NAME/stream/$NAME.m3u8"
 
 HLS_TIME=${HLS_TIME:-5} # 5 seconds, inherent delay, each streamed chunk will be this long
 HLS_LIST_SIZE=${HLS_LIST_SIZE:-360}  # keep this many chunks of the above duration
