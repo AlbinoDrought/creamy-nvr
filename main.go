@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -606,6 +607,8 @@ func main() {
 						restart := stream.RestartRecording.Load()
 						if restart != nil {
 							restart()
+						} else {
+							logger.Warn("stream.RestartRecording is nil!")
 						}
 					} else if !lastFileOpenedInErr && lastFileOpenedCurrentlyInErr {
 						logger.WithField("last-open", lastFileOpened).Info("stream has opened a file in the last 3 minutes")
@@ -620,6 +623,8 @@ func main() {
 						restart := stream.RestartRecording.Load()
 						if restart != nil {
 							restart()
+						} else {
+							logger.Warn("stream.RestartRecording is nil!")
 						}
 					} else if !lastSegmentOpenedInErr && lastSegmentOpenedCurrentlyInErr {
 						logger.WithField("last-open", lastSegmentOpened).Info("stream has opened a segment in the last 15 minutes")
@@ -762,6 +767,7 @@ func record(ctx context.Context, stream *Stream) {
 
 	newCmd := func() *exec.Cmd {
 		cmd := exec.CommandContext(ctx, "./rtsp-to-hls.sh")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid: 0}
 		cmd.Env = append(
 			cmd.Env,
 			"RTSP_SOURCE="+stream.Input.URL,
@@ -779,7 +785,10 @@ func record(ctx context.Context, stream *Stream) {
 			cmdRestartLock.Lock()
 			defer cmdRestartLock.Unlock()
 			if cmd.Process != nil {
-				cmd.Process.Kill()
+				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				logger.Info("performed kill")
+			} else {
+				logger.Warn("restart recording was requested, but process is nil")
 			}
 		})
 		return cmd
