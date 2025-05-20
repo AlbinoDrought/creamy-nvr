@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"embed"
@@ -64,6 +65,12 @@ type Input struct {
 	// StreamSizeLimitMegabytes is the amount of megabytes of stream segments to keep.
 	// See RecordingSizeLimitMegabytes
 	StreamSizeLimitMegabytes int `json:"stream_size_limit_megabytes"`
+
+	// MotionDetectionMinimumScore is the minimum ffmpeg scdet score required
+	// for a motion entry to appear in the recording's motion detection list.
+	// Defaults to 2.
+	// Raise this if you get way too many false positives.
+	// MotionDetectionMinimumScore int `json:"motion_detection_minimum_score"`
 }
 
 // RecordingDirectory contains .mp4 files saved from this stream
@@ -109,12 +116,14 @@ func (v *AValue[T]) Store(val T) {
 	v.inner = &val
 }
 
-func parseRecordingTime(path string) (time.Time, error) {
-	if len(path) < 24 {
-		return time.Time{}, fmt.Errorf("path is too short, cannot parse recording time: %v", path)
+func parseRecordingTime(fpath string) (time.Time, error) {
+	fpath = strings.TrimSuffix(fpath, ".jpg")
+	fpath = strings.TrimSuffix(fpath, ".json")
+	if len(fpath) < 24 {
+		return time.Time{}, fmt.Errorf("path is too short, cannot parse recording time: %v", fpath)
 	}
 	// abcd-2025-04-23-21-09-05.mp4
-	recordingDateRaw := path[len(path)-23 : len(path)-4]
+	recordingDateRaw := fpath[len(fpath)-23 : len(fpath)-4]
 	return time.Parse("2006-01-02-15-04-05", recordingDateRaw)
 }
 
@@ -157,6 +166,9 @@ type Recording struct {
 	Start   time.Time
 	End     time.Time
 	Path    string
+
+	PerformedMotionDetect bool
+	Motion                []motion
 }
 
 type ApiV1Stream struct {
@@ -176,6 +188,14 @@ type ApiV1Recording struct {
 	End           string `json:"end"`
 	Path          string `json:"path"`
 	ThumbnailPath string `json:"thumbnail_path"`
+
+	PerformedMotionDetect bool          `json:"performed_motion_detect"`
+	Motion                []ApiV1Motion `json:"motion"`
+}
+
+type ApiV1Motion struct {
+	Time  int `json:"t"`
+	Score int `json:"s"`
 }
 
 var logger = logrus.New()
@@ -240,6 +260,43 @@ func main() {
 	recordingsLock := sync.RWMutex{}
 	saveRecording := make(chan Recording)
 	sortRecording := make(chan bool)
+	type addRecordingMotionParams struct {
+		RecordingID string
+		Motion      []motion
+	}
+	addRecordingMotion := make(chan addRecordingMotionParams)
+
+	type performMotionDetectionParams struct {
+		InputID       string
+		RecordingID   string
+		RecordingPath string
+	}
+	// todo: workers per recording stream instead. load motion using different worker pool
+	performMotionDetection := make(chan performMotionDetectionParams)
+	for range len(config.Inputs) { // todo: configurable worker count
+		go func() {
+			doWork := func(work performMotionDetectionParams) {
+				ctx, cancel := context.WithTimeout(ctx, time.Minute)
+				defer cancel()
+
+				recordingID := path.Base(work.RecordingPath)
+				m, err := motionTimeline(ctx, work.RecordingPath)
+				if err != nil {
+					logger.WithError(err).WithField("unit", "recordings-loader").WithField("path", work.RecordingPath).WithField("input", work.InputID).Warn("failed to perform motion detect on old recording, skipping")
+				} else {
+					addRecordingMotion <- addRecordingMotionParams{
+						RecordingID: recordingID,
+						Motion:      m,
+					}
+					logger.WithField("unit", "recordings-loader").WithField("path", work.RecordingPath).WithField("input", work.InputID).Debug("performed motion detect")
+				}
+			}
+
+			for work := range performMotionDetection {
+				doWork(work)
+			}
+		}()
+	}
 
 	removeRecordingFromMem := func(path string) {
 		recordingsLock.Lock()
@@ -447,6 +504,17 @@ func main() {
 				})
 				logger.Debug("sorted recordings")
 				recordingsLock.Unlock()
+			case p := <-addRecordingMotion:
+				recordingsLock.Lock()
+				for i := range recordings {
+					if recordings[i].ID == p.RecordingID {
+						recordings[i].PerformedMotionDetect = true
+						recordings[i].Motion = p.Motion
+						break
+					}
+				}
+				logger.WithField("payload", p).Debug("added motion")
+				recordingsLock.Unlock()
 			}
 		}
 	}()
@@ -530,6 +598,7 @@ func main() {
 					return fmt.Errorf("failed to parse time from path %v: %v", fpath, err)
 				}
 
+				// todo: load this from datastore instead of calling ffprobe on every recording on boot
 				ctx, cancel := context.WithTimeout(ctx, time.Minute)
 				defer cancel()
 				ffprobe := exec.CommandContext(
@@ -561,20 +630,48 @@ func main() {
 				durationI := int(duration)
 				end := recordingDate.Add(time.Second * time.Duration(durationI))
 
+				recordingID := path.Base(fpath)
 				saveRecording <- Recording{
-					ID:      path.Base(fpath),
+					ID:      recordingID,
 					InputID: input.ID,
 					Start:   recordingDate,
 					End:     end,
 					Path:    fpath, // todo: make into subdir
 				}
-				logger.WithField("unit", "recordings-loader").WithField("input", input.ID).Debug("loaded recording")
+				logger.WithField("unit", "recordings-loader").WithField("path", fpath).WithField("input", input.ID).Debug("loaded recording")
 
 				return nil
 			})
 			sortRecording <- true
 			if err != nil {
 				logger.WithError(err).WithField("input", input.ID).Warn("failed to parse old recordings, ignoring")
+			}
+		}
+
+		for _, input := range config.Inputs {
+			err := filepath.Walk(input.RecordingDirectory(), func(fpath string, info fs.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if !strings.HasSuffix(fpath, ".mp4") || !strings.Contains(fpath, input.ID) {
+					return nil
+				}
+
+				if _, err := parseRecordingTime(fpath); err != nil {
+					return fmt.Errorf("failed to parse time from path %v: %v", fpath, err)
+				}
+
+				performMotionDetection <- performMotionDetectionParams{
+					InputID:       input.ID,
+					RecordingID:   path.Base(fpath),
+					RecordingPath: fpath,
+				}
+
+				return nil
+			})
+			sortRecording <- true
+			if err != nil {
+				logger.WithError(err).WithField("input", input.ID).Warn("failed to parse old recordings motion detect, ignoring")
 			}
 		}
 	}()
@@ -672,6 +769,13 @@ func main() {
 			apiRecordings[i].End = recordings[revIdx].End.Format(time.RFC3339)
 			apiRecordings[i].Path = "/" + strings.TrimPrefix(recordings[revIdx].Path, "/")
 			apiRecordings[i].ThumbnailPath = "/" + strings.TrimPrefix(recordings[revIdx].Path+".jpg", "/")
+			// todo: if these properties are large, only expose sometimes
+			apiRecordings[i].PerformedMotionDetect = recordings[revIdx].PerformedMotionDetect
+			apiRecordings[i].Motion = make([]ApiV1Motion, len(recordings[revIdx].Motion))
+			for ii := range len(recordings[revIdx].Motion) {
+				apiRecordings[i].Motion[ii].Time = recordings[revIdx].Motion[ii].Time
+				apiRecordings[i].Motion[ii].Score = recordings[revIdx].Motion[ii].Score
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(&apiRecordings)
@@ -827,4 +931,131 @@ func record(ctx context.Context, stream *Stream) {
 
 		time.Sleep(30 * time.Second)
 	}
+}
+
+type motion struct {
+	Time  int // seconds
+	Score int // 0-100
+}
+
+var motionTimeRegex = regexp.MustCompile(`frame:(\d+) +pts:(\d+) +pts_time:([\d\.]+)`)
+var motionScoreRegex = regexp.MustCompile(`lavfi.scene_score=([\d\.]+)`)
+
+func motionTimeline(ctx context.Context, fpath string) ([]motion, error) {
+	probeCtx, probeCancel := context.WithTimeout(ctx, time.Minute)
+	defer probeCancel()
+	ffprobe := exec.CommandContext(
+		probeCtx,
+		"ffprobe", fpath,
+		"-v", "quiet",
+		"-of", "json",
+		"-show_entries", "stream",
+	)
+	data, err := ffprobe.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to motion ffprobe %v: %v", fpath, err)
+	}
+
+	type ffprobeOutput struct {
+		Streams []struct {
+			// there's also "r_frame_rate", but I think it might be more work to parse values like "500000/33333"
+			CodecType string `json:"codec_type"`
+			Duration  string `json:"duration"`
+			NbFrames  string `json:"nb_frames"`
+		} `json:"streams"`
+	}
+	var parsed ffprobeOutput
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("failed to parse motion ffprobe output %v: %v", string(data), err)
+	}
+
+	var fps int
+	for _, output := range parsed.Streams {
+		if output.CodecType != "video" {
+			continue
+		}
+		durationF, err := strconv.ParseFloat(output.Duration, 64)
+		if err != nil {
+			continue
+		}
+		durationI := int(durationF)
+		if durationI < 1 {
+			continue
+		}
+		nbFramesI, err := strconv.ParseInt(output.NbFrames, 10, 64)
+		if err != nil {
+			continue
+		}
+		if nbFramesI < 1 {
+			continue
+		}
+		fps = int(nbFramesI) / durationI
+		if fps < 1 {
+			fps = 1
+		}
+	}
+	if fps < 1 {
+		// todo: we can probably continue without fps
+		return nil, fmt.Errorf("failed to determine fps of %v: determined fps<1 from %v", fpath, string(data))
+	}
+	// todo: if ~1 value per second is too many, we can re-evaluate, or merge/avg/downsample them later here
+	// todo: configurable scene motion value
+
+	motionCtx, motionCancel := context.WithTimeout(ctx, time.Minute)
+	defer motionCancel()
+	ffmpeg := exec.CommandContext(
+		motionCtx,
+		"ffmpeg",
+		"-i", fpath,
+		"-vf", fmt.Sprintf(`select='not(mod(n\,%v))',select='gte(scene\,0.02)',metadata=print`, fps),
+		"-an",
+		"-f", "null",
+		"-",
+	)
+	data, err = ffmpeg.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to motion ffmpeg %v: %v (%v)", fpath, err, ffmpeg.Args)
+	}
+
+	ms := []motion{}
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	var (
+		m        motion
+		hasTime  bool
+		hasScore bool
+	)
+	for scanner.Scan() {
+		line := scanner.Text()
+		timeMatch := motionTimeRegex.FindStringSubmatch(line)
+		if timeMatch != nil {
+			timeMatchF, err := strconv.ParseFloat(timeMatch[3], 64)
+			if err != nil {
+				// todo: warn
+				continue
+			}
+			m.Time = int(timeMatchF)
+			hasTime = true
+			continue
+		}
+		scoreMatch := motionScoreRegex.FindStringSubmatch(line)
+		if scoreMatch != nil {
+			scoreMatchF, err := strconv.ParseFloat(scoreMatch[1], 64)
+			if err != nil {
+				// todo: warn
+				continue
+			}
+			m.Score = int(scoreMatchF * 100)
+			hasScore = true
+		}
+
+		if hasTime && hasScore {
+			hasTime = false
+			hasScore = false
+			ms = append(ms, m)
+			m = motion{}
+		}
+	}
+
+	return ms, nil
 }
