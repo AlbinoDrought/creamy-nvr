@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, reactive, ref, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStreamStore } from '@/stores/stream';
 
@@ -14,6 +14,38 @@ const props = defineProps<{
 }>();
 
 const recording = computed(() => streamStore.recordings.find(r => r.id === props.recording));
+
+const recordingDuration = computed(() => {
+  if (!recording.value) {
+    return 0;
+  }
+  return Math.round(((new Date(recording.value.end)).getTime() - (new Date(recording.value.start)).getTime()) / 1000)
+});
+
+const data = reactive({
+  sliderPos: 0,
+  sliderPosInterval: null as ReturnType<typeof setInterval>|null,
+});
+
+const video = ref<HTMLVideoElement|null>(null);
+
+const setVideoPos = () => {
+  if (!video.value) {
+    return;
+  }
+  video.value.currentTime = data.sliderPos;
+};
+
+data.sliderPosInterval = setInterval(() => {
+  if (video.value) {
+    data.sliderPos = video.value.currentTime;
+  }
+}, 100);
+onBeforeUnmount(() => {
+  if (data.sliderPosInterval !== null) {
+    clearInterval(data.sliderPosInterval);
+  }
+});
 </script>
 
 <template>
@@ -34,6 +66,7 @@ const recording = computed(() => streamStore.recordings.find(r => r.id === props
             muted
             controls
             autoplay
+            ref="video"
           />
         </div>
       </div>
@@ -62,6 +95,13 @@ const recording = computed(() => streamStore.recordings.find(r => r.id === props
           </button>
         </div>
       </div> -->
+
+      <div v-if="recording && recording.performed_motion_detect" class="bg-gray-800 text-white p-4">
+        <input class="range" type="range" list="range" step="any" :min="0" :max="recordingDuration" v-model="data.sliderPos" @input="setVideoPos" />
+        <datalist id="range">
+          <option v-for="m in recording.motion" :value="m.t" :label="`${m.s}`"></option>
+        </datalist>
+      </div>
       
       <div v-if="recording" class="bg-gray-900 text-white p-4">
         <div class="flex items-center justify-between">
@@ -99,3 +139,9 @@ const recording = computed(() => streamStore.recordings.find(r => r.id === props
     </div>
   </div>
 </template>
+
+<style scoped>
+.range {
+  width: 100%;
+}
+</style>
