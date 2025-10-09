@@ -276,7 +276,7 @@ func main() {
 	for range len(config.Inputs) { // todo: configurable worker count
 		go func() {
 			doWork := func(work performMotionDetectionParams) {
-				ctx, cancel := context.WithTimeout(ctx, time.Minute)
+				ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 				defer cancel()
 
 				recordingID := path.Base(work.RecordingPath)
@@ -1059,7 +1059,7 @@ func motionTimeline(ctx context.Context, fpath string) ([]motion, error) {
 	// }
 
 	// todo: this works better for motion detection imo, but it is heavy
-	motionCtx, motionCancel := context.WithTimeout(ctx, time.Minute)
+	motionCtx, motionCancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer motionCancel()
 	ffmpeg := exec.CommandContext(
 		motionCtx,
