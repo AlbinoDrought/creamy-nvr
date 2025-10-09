@@ -669,7 +669,6 @@ func main() {
 
 				return nil
 			})
-			sortRecording <- true
 			if err != nil {
 				logger.WithError(err).WithField("input", input.ID).Warn("failed to parse old recordings motion detect, ignoring")
 			}
