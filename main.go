@@ -93,6 +93,9 @@ type Config struct {
 	// If 1, run every minute.
 	// If 60, run every 60 minutes, etc.
 	PruneIntervalMinutes int `json:"prune_interval_minutes"`
+	// MotionDetectionWorkers determines how many motion detection goroutines to run.
+	// If 0, uses one worker per input or at least two goroutines - whichever is greater.
+	MotionDetectionWorkers int `json:"motion_detection_workers"`
 	// Inputs is the list of input streams we should record
 	Inputs []Input `json:"inputs"`
 }
@@ -283,7 +286,14 @@ func main() {
 	}
 	// todo: workers per recording stream instead. load motion using different worker pool
 	performMotionDetection := make(chan performMotionDetectionParams)
-	for range len(config.Inputs) { // todo: configurable worker count
+	motionDetectionWorkers := config.MotionDetectionWorkers
+	if motionDetectionWorkers == 0 {
+		motionDetectionWorkers = len(config.Inputs)
+		if motionDetectionWorkers < 2 {
+			motionDetectionWorkers = 2
+		}
+	}
+	for range motionDetectionWorkers {
 		go func() {
 			doWork := func(work performMotionDetectionParams) {
 				ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
