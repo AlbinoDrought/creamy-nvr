@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Hls from 'hls.js';
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 
 const video = ref(null);
 
@@ -25,6 +25,9 @@ onMounted(() => {
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         elVideo.play();
       });
+    });
+    onUnmounted(() => {
+      hls.destroy();
     });
   } else if (elVideo.canPlayType('application/vnd.apple.mpegurl')) {
     elVideo.src = props.source;
