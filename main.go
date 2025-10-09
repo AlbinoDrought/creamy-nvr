@@ -686,6 +686,9 @@ func main() {
 	mux.Handle("/recordings", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, sub, "index.html")
 	}))
+	mux.Handle("/recordings/{file}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, sub, "index.html")
+	}))
 	mux.Handle("/", http.FileServerFS(sub))
 
 	if err := http.ListenAndServe(":3000", mux); err != nil {
