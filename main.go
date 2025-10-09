@@ -547,6 +547,17 @@ func main() {
 			}
 		}()
 
+		motionDetectQueue := make(chan string, 1)
+		go func() {
+			for segment := range motionDetectQueue {
+				performMotionDetection <- performMotionDetectionParams{
+					InputID:       config.Inputs[inputIdx].ID,
+					RecordingID:   path.Base(segment),
+					RecordingPath: segment,
+				}
+			}
+		}()
+
 		return func(opened time.Time, segment string) {
 			// newRecordingIdx := atomic.AddUint64(&recordingIdx, 1)
 			saveRecording <- Recording{
@@ -558,6 +569,11 @@ func main() {
 				Path:    segment,
 			}
 			thumbnailQueue <- segment
+			select {
+			case motionDetectQueue <- segment:
+			default:
+				logger.WithField("segment", segment).Warn("local motion detect queue full, skipping")
+			}
 		}
 	}
 
