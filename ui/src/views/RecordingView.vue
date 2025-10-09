@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStreamStore } from '@/stores/stream';
+import { ArrowLeft, Download, Maximize } from 'lucide-vue-next';
 
 const router = useRouter();
 
@@ -14,88 +15,77 @@ const props = defineProps<{
 }>();
 
 const recording = computed(() => streamStore.recordings.find(r => r.id === props.recording));
+const videoContainer = ref<HTMLDivElement | null>(null);
+
+const toggleFullscreen = () => {
+  if (!videoContainer.value) return;
+
+  if (!document.fullscreenElement) {
+    videoContainer.value.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
+};
 </script>
 
 <template>
-  <div class="h-full flex flex-col">
-    <div class="relative h-full flex flex-col">
-      <div class="absolute top-4 right-4 z-10">
-        <button @click.prevent="router.push({ name: 'recordings' })" class="bg-gray-900 text-white p-2 rounded cursor-pointer">
-          ✕
-        </button>
-      </div>
-      
-      <div class="flex-1 bg-gray-700 flex items-center justify-center">
-        <div class="w-full h-full flex items-center justify-center bg-gray-700">
-          <video
-            v-if="recording"
-            style="max-height: 80vh"
-            :src="recording.path"
-            muted
-            controls
-            autoplay
-          />
-        </div>
-      </div>
-      
-      <!-- <div class="h-16 bg-gray-800 flex items-center justify-between px-4">
-        <div class="flex items-center gap-4">
-          <button class="text-white">
-            ⏸️
-          </button>
-          <button class="text-white">
-            🔇
-          </button>
-          <div class="flex items-center text-white gap-1">
-            <span>00:22</span>
-            <span>/</span>
-            <span>04:12</span>
+  <div class="h-full flex flex-col bg-gray-900">
+    <div class="absolute top-4 left-4 z-10 flex gap-2">
+      <button
+        @click="router.push({ name: 'recordings' })"
+        class="bg-gray-900/80 hover:bg-gray-900 text-white p-3 rounded-md cursor-pointer transition-colors backdrop-blur-sm"
+        title="Back to Recordings"
+      >
+        <ArrowLeft :size="20" />
+      </button>
+    </div>
+
+    <div class="absolute top-4 right-4 z-10 flex gap-2">
+      <a
+        v-if="recording"
+        :href="recording.path"
+        download
+        class="bg-gray-900/80 hover:bg-gray-900 text-white p-3 rounded-md cursor-pointer transition-colors backdrop-blur-sm"
+        title="Download Recording"
+      >
+        <Download :size="20" />
+      </a>
+      <button
+        @click="toggleFullscreen"
+        class="bg-gray-900/80 hover:bg-gray-900 text-white p-3 rounded-md cursor-pointer transition-colors backdrop-blur-sm"
+        title="Toggle Fullscreen"
+      >
+        <Maximize :size="20" />
+      </button>
+    </div>
+
+    <div v-if="recording" class="flex-1 flex flex-col items-center justify-center relative">
+      <div ref="videoContainer" class="w-full h-full max-w-7xl bg-black relative">
+        <video
+          class="w-full h-full"
+          :src="recording.path"
+          muted
+          controls
+          autoplay
+        />
+
+        <div class="absolute bottom-16 left-4 z-20 bg-gray-900/90 text-white px-4 py-2 rounded-md backdrop-blur-sm max-w-[calc(100%-2rem)]">
+          <h2 class="text-lg font-medium mb-1">{{ recording.stream_name }}</h2>
+          <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm text-gray-300">
+            <RouterLink :to="`/cameras/${recording.stream_id}`" class="hover:underline">
+              View Camera
+            </RouterLink>
+            <span class="hidden sm:inline">•</span>
+            <span>{{ (new Date(recording.start)).toLocaleString() }}</span>
+            <span class="hidden sm:inline">•</span>
+            <span>{{ Math.round(((new Date(recording.end)).getTime() - (new Date(recording.start)).getTime()) / (1000 * 60)) }} min</span>
           </div>
-          <div class="w-64 h-1 bg-gray-600 rounded-full overflow-hidden">
-            <div class="w-1/4 h-full bg-nvrblue"></div>
-          </div>
-        </div>
-        
-        <div class="flex items-center gap-2">
-          <button class="text-white">
-            📺
-          </button>
-        </div>
-      </div> -->
-      
-      <div v-if="recording" class="bg-gray-900 text-white p-4">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-medium">Info</h3>
-          <button>▼</button>
-        </div>
-        
-        <div class="grid grid-cols-2 gap-y-2 mt-4">
-          <div>Stream</div>
-          <div class="text-right">{{ recording.stream_name }}</div>
-          
-          <div>Date/Time</div>
-          <div class="text-right">{{ (new Date(recording.start)).toLocaleString() }}</div>
-          
-          <div>Duration</div>
-          <div class="text-right">{{ Math.round(((new Date(recording.end)).getTime() - (new Date(recording.start)).getTime()) / (1000 * 60)) }} minutes</div>
-          
-<!--           
-          <div>Unlocked</div>
-          <div class="text-right flex items-center justify-end">
-            <div class="h-6 w-6 rounded bg-gray-700 mr-1"></div>
-            <button class="h-6 w-6 rounded bg-gray-700">🔓</button>
-          </div> -->
         </div>
       </div>
-      
-      <div v-if="recording" class="p-4 bg-gray-100 flex justify-end gap-2">
-        <a class="nvr-button bg-blue-500 flex items-center gap-2 py-2" :href="recording.path" download>
-          ⬇️ DOWNLOAD
-        </a>
-        <!-- <button class="border border-gray-300 px-4 py-2 rounded flex items-center gap-2 text-sm">
-          🗑️ DELETE
-        </button> -->
-      </div>
+    </div>
+
+    <div v-else class="flex-1 flex items-center justify-center text-white">
+      <p>Recording not found</p>
     </div>
   </div>
 </template>
