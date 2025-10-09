@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
 import { Video } from 'lucide-vue-next';
 import { useStreamStore } from '@/stores/stream';
-import * as types from '@/stores/streamTypes';
 
 const streamStore = useStreamStore();
-const router = useRouter();
 
 streamStore.loadStreams();
 
@@ -22,10 +19,6 @@ streamStore.loadStreams();
 // const handleSelectCamera = (e: Event, id: unknown) => {
 //   throw new Error('todo 2');
 // };
-
-function viewStream(stream: types.Stream) {
-  router.push({ name: 'live-view', query: { stream: stream.id } });
-}
 </script>
 
 <template>
@@ -63,8 +56,8 @@ function viewStream(stream: types.Stream) {
       </div>
     </div> -->
     
-    <div class="flex-1 px-4 pb-4">
-      <table class="w-full nvr-table">
+    <div class="flex-1 px-4 pb-4 overflow-x-auto">
+      <table class="w-full nvr-table min-w-[600px]">
         <thead>
           <tr>
             <th class="w-6">
@@ -85,18 +78,23 @@ function viewStream(stream: types.Stream) {
           </tr>
         </thead>
         <tbody>
-            <tr v-for="stream in streamStore.streams" :key="stream.id" class="cursor-pointer" @click.prevent="viewStream(stream)">
-              <td>
-                <!-- <input 
-                  type="checkbox" 
+            <tr v-for="stream in streamStore.streams" :key="stream.id" class="cursor-pointer">
+              <td @click.stop>
+                <!-- <input
+                  type="checkbox"
                   class="h-4 w-4"
                   :checked="data.selectedCameras.includes(stream.id)"
                   @change="e => handleSelectCamera(e, stream.id)"
                 /> -->
               </td>
-              <td class="flex items-center gap-2">
-                <span :class="['h-4 w-4 rounded-full', { 'bg-green-500': stream.active && !stream.in_err, 'bg-yellow-500': stream.active && stream.in_err, 'bg-red-500': !stream.active }]"></span>
-                {{ stream.name }}
+              <td>
+                <RouterLink
+                  :to="{ name: 'camera', params: { streamId: stream.id } }"
+                  class="flex items-center gap-2"
+                >
+                  <span :class="['h-4 w-4 rounded-full', { 'bg-green-500': stream.active && !stream.in_err, 'bg-yellow-500': stream.active && stream.in_err, 'bg-red-500': !stream.active }]"></span>
+                  {{ stream.name }}
+                </RouterLink>
               </td>
               <!-- <td>{{ camera.host }}</td> -->
               <!-- <td>{{ camera.macAddress }}</td> -->
@@ -106,13 +104,23 @@ function viewStream(stream: types.Stream) {
                   <span>{{ camera.linkState }}</span>
                 </div>
               </td> -->
-              <td>{{ (new Date(stream.last_recording)).toLocaleString() }}</td>
+              <td>
+                <RouterLink
+                  :to="{ name: 'camera', params: { streamId: stream.id } }"
+                  class="block"
+                >
+                  {{ (new Date(stream.last_recording)).toLocaleString() }}
+                </RouterLink>
+              </td>
               <!-- <td>{{ camera.recordingType }}</td> -->
               <td>
-                <button type="button" class="nvr-button flex items-center justify-center gap-1 mx-auto cursor-pointer" @click.prevent="viewStream(stream)">
+                <RouterLink
+                  :to="{ name: 'camera', params: { streamId: stream.id } }"
+                  class="nvr-button flex items-center justify-center gap-1 mx-auto"
+                >
                   <Video :size="14" />
                   <span>Watch Live</span>
-                </button>
+                </RouterLink>
               </td>
             </tr>
         </tbody>

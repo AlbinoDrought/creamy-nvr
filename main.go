@@ -680,6 +680,9 @@ func main() {
 	mux.Handle("/cameras", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, sub, "index.html")
 	}))
+	mux.Handle("/cameras/{camera}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, sub, "index.html")
+	}))
 	mux.Handle("/live-view", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, sub, "index.html")
 	}))
