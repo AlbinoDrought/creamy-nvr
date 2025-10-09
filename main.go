@@ -938,8 +938,9 @@ type motion struct {
 	Score int // 0-100
 }
 
-var motionTimeRegex = regexp.MustCompile(`frame:(\d+) +pts:(\d+) +pts_time:([\d\.]+)`)
-var motionScoreRegex = regexp.MustCompile(`lavfi.scene_score=([\d\.]+)`)
+// var motionTimeRegex = regexp.MustCompile(`frame:(\d+) +pts:(\d+) +pts_time:([\d\.]+)`)
+// var motionScoreRegex = regexp.MustCompile(`lavfi.scene_score=([\d\.]+)`)
+var motionTimeRegexMpDecimate = regexp.MustCompile(`showinfo.+ pts_time:([\d\.]+)`)
 
 func motionTimeline(ctx context.Context, fpath string) ([]motion, error) {
 	probeCtx, probeCancel := context.WithTimeout(ctx, time.Minute)
@@ -1001,13 +1002,70 @@ func motionTimeline(ctx context.Context, fpath string) ([]motion, error) {
 	// todo: if ~1 value per second is too many, we can re-evaluate, or merge/avg/downsample them later here
 	// todo: configurable scene motion value
 
+	// motionCtx, motionCancel := context.WithTimeout(ctx, time.Minute)
+	// defer motionCancel()
+	// ffmpeg := exec.CommandContext(
+	// 	motionCtx,
+	// 	"ffmpeg",
+	// 	"-i", fpath,
+	// 	"-vf", fmt.Sprintf(`select='not(mod(n\,%v))',select='gte(scene\,0.02)',metadata=print`, fps),
+	// 	"-an",
+	// 	"-f", "null",
+	// 	"-",
+	// )
+	// data, err = ffmpeg.CombinedOutput()
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to motion ffmpeg %v: %v (%v)", fpath, err, ffmpeg.Args)
+	// }
+
+	// ms := []motion{}
+
+	// scanner := bufio.NewScanner(bytes.NewReader(data))
+	// var (
+	// 	m        motion
+	// 	hasTime  bool
+	// 	hasScore bool
+	// )
+	// for scanner.Scan() {
+	// 	line := scanner.Text()
+	// 	timeMatch := motionTimeRegex.FindStringSubmatch(line)
+	// 	if timeMatch != nil {
+	// 		timeMatchF, err := strconv.ParseFloat(timeMatch[3], 64)
+	// 		if err != nil {
+	// 			// todo: warn
+	// 			continue
+	// 		}
+	// 		m.Time = int(timeMatchF)
+	// 		hasTime = true
+	// 		continue
+	// 	}
+	// 	scoreMatch := motionScoreRegex.FindStringSubmatch(line)
+	// 	if scoreMatch != nil {
+	// 		scoreMatchF, err := strconv.ParseFloat(scoreMatch[1], 64)
+	// 		if err != nil {
+	// 			// todo: warn
+	// 			continue
+	// 		}
+	// 		m.Score = int(scoreMatchF * 100)
+	// 		hasScore = true
+	// 	}
+
+	// 	if hasTime && hasScore {
+	// 		hasTime = false
+	// 		hasScore = false
+	// 		ms = append(ms, m)
+	// 		m = motion{}
+	// 	}
+	// }
+
+	// todo: this works better for motion detection imo, but it is heavy
 	motionCtx, motionCancel := context.WithTimeout(ctx, time.Minute)
 	defer motionCancel()
 	ffmpeg := exec.CommandContext(
 		motionCtx,
 		"ffmpeg",
 		"-i", fpath,
-		"-vf", fmt.Sprintf(`select='not(mod(n\,%v))',select='gte(scene\,0.02)',metadata=print`, fps),
+		"-vf", "mpdecimate=hi=2000:lo=1000:frac=0.33,showinfo", // todo: tune
 		"-an",
 		"-f", "null",
 		"-",
@@ -1019,43 +1077,40 @@ func motionTimeline(ctx context.Context, fpath string) ([]motion, error) {
 
 	ms := []motion{}
 
+	secondMotionCounters := map[int]int{}
+
 	scanner := bufio.NewScanner(bytes.NewReader(data))
-	var (
-		m        motion
-		hasTime  bool
-		hasScore bool
-	)
 	for scanner.Scan() {
 		line := scanner.Text()
-		timeMatch := motionTimeRegex.FindStringSubmatch(line)
-		if timeMatch != nil {
-			timeMatchF, err := strconv.ParseFloat(timeMatch[3], 64)
-			if err != nil {
-				// todo: warn
-				continue
-			}
-			m.Time = int(timeMatchF)
-			hasTime = true
+		timeMatch := motionTimeRegexMpDecimate.FindStringSubmatch(line)
+		if timeMatch == nil {
 			continue
 		}
-		scoreMatch := motionScoreRegex.FindStringSubmatch(line)
-		if scoreMatch != nil {
-			scoreMatchF, err := strconv.ParseFloat(scoreMatch[1], 64)
-			if err != nil {
-				// todo: warn
-				continue
-			}
-			m.Score = int(scoreMatchF * 100)
-			hasScore = true
+		timeMatchF, err := strconv.ParseFloat(timeMatch[1], 64)
+		if err != nil {
+			// todo: warn
+			continue
 		}
+		timeMatchI := int(timeMatchF)
 
-		if hasTime && hasScore {
-			hasTime = false
-			hasScore = false
-			ms = append(ms, m)
-			m = motion{}
-		}
+		ctr := secondMotionCounters[timeMatchI]
+		ctr++
+		secondMotionCounters[timeMatchI] = ctr
 	}
+
+	for second, ctr := range secondMotionCounters {
+		score := int((float32(ctr) / float32(fps)) * 100)
+		if score > 100 {
+			score = 100
+		}
+		ms = append(ms, motion{
+			Time:  second,
+			Score: score,
+		})
+	}
+	sort.Slice(ms, func(i, j int) bool {
+		return ms[i].Time < ms[j].Time
+	})
 
 	return ms, nil
 }
