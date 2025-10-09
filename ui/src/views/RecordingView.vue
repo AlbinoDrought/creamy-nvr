@@ -37,6 +37,16 @@ const setVideoPos = () => {
   video.value.currentTime = data.sliderPos;
 };
 
+const formatTime = (seconds: number) => {
+  let base = 0;
+  if (recording.value) {
+    base = (new Date(recording.value.start)).getTime() / 1000;
+  }
+
+  const date = new Date((base + seconds) * 1000);
+  return date.toLocaleTimeString();
+};
+
 data.sliderPosInterval = setInterval(() => {
   if (video.value) {
     data.sliderPos = video.value.currentTime;
@@ -115,11 +125,43 @@ const toggleFullscreen = () => {
           </div>
         </div>
 
-        <div v-if="recording && recording.performed_motion_detect" class="bg-gray-800 text-white p-4">
-          <input class="range" type="range" list="range" step="any" :min="0" :max="recordingDuration" v-model="data.sliderPos" @input="setVideoPos" />
-          <datalist id="range">
-            <option v-for="m in recording.motion" :value="m.t" :label="`${m.s}`"></option>
-          </datalist>
+        <div v-if="recording && recording.performed_motion_detect" class="bg-black text-white px-6 py-4">
+          <div class="timeline-container">
+            <div class="motion-markers">
+              <div
+                v-for="m in recording.motion"
+                :key="m.t"
+                class="motion-marker"
+                :style="{
+                  left: `${(m.t / recordingDuration) * 100}%`,
+                  height: `${Math.max(10, (m.s / 100) * 100)}%`
+                }"
+                :title="`Motion score: ${m.s}`"
+              ></div>
+            </div>
+
+            <div class="timeline-track">
+              <div class="timeline-progress" :style="{ width: `${(data.sliderPos / recordingDuration) * 100}%` }"></div>
+            </div>
+
+            <input
+              class="timeline-slider"
+              type="range"
+              step="any"
+              :min="0"
+              :max="recordingDuration"
+              v-model="data.sliderPos"
+              @input="setVideoPos"
+            />
+
+            <div class="timeline-labels">
+              <div class="timeline-label timeline-label--first">{{ formatTime(0) }}</div>
+              <div class="timeline-label timeline-label--mid">{{ formatTime(recordingDuration / 4) }}</div>
+              <div class="timeline-label timeline-label--mid">{{ formatTime(recordingDuration / 2) }}</div>
+              <div class="timeline-label timeline-label--mid">{{ formatTime(3 * recordingDuration / 4) }}</div>
+              <div class="timeline-label timeline-label--last">{{ formatTime(recordingDuration) }}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -131,7 +173,112 @@ const toggleFullscreen = () => {
 </template>
 
 <style scoped>
-.range {
+.timeline-container {
+  position: relative;
   width: 100%;
+  height: 60px;
+}
+
+.motion-markers {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  pointer-events: none;
+}
+
+.motion-marker {
+  position: absolute;
+  bottom: 0;
+  width: 2px;
+  background-color: #ef4444;
+  transform: translateX(-50%);
+  opacity: 0.8;
+}
+
+.timeline-track {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background-color: #374151;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.timeline-progress {
+  height: 100%;
+  background-color: #6b7280;
+  transition: width 0.1s linear;
+}
+
+.timeline-slider {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 20px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  z-index: 10;
+}
+
+.timeline-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.1s ease;
+}
+
+.timeline-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.timeline-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.1s ease;
+}
+
+.timeline-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+}
+
+.timeline-labels {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.timeline-label {
+  user-select: none;
+}
+
+@media (max-width: 600px) {
+  .timeline-label--mid {
+    display: none;
+  }
 }
 </style>
