@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { reactive } from 'vue';
-import { useRouter } from 'vue-router';
 import { useStreamStore } from '@/stores/stream';
-import * as types from '@/stores/streamTypes';
-
-const router = useRouter();
 
 const streamStore = useStreamStore();
 
@@ -25,15 +21,6 @@ const data = reactive({
 // const search = () => {
 //   throw new Error('todo');
 // };
-
-const viewRecording = (recording: types.Recording) => {
-  router.push({
-    name: 'recording',
-    params: {
-      recording: recording.id,
-    }, 
-  });
-};
 
 // const handleSelectRecording = (e: Event, r: unknown) => {
 //   throw new Error('todo 3');
@@ -160,8 +147,8 @@ const viewRecording = (recording: types.Recording) => {
       </div>
     </div> -->
     
-    <div class="flex-1">
-      <table class="w-full nvr-table">
+    <div class="flex-1 overflow-x-auto">
+      <table class="w-full nvr-table min-w-[700px]">
         <thead>
           <tr>
             <th class="w-6">
@@ -179,26 +166,43 @@ const viewRecording = (recording: types.Recording) => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="recording in streamStore.recordings" :key="recording.id" @click="viewRecording(recording)" class="cursor-pointer">
-            <td @click.prevent>
-              <!-- <input 
-                type="checkbox" 
+          <tr v-for="recording in streamStore.recordings" :key="recording.id">
+            <td @click.stop>
+              <!-- <input
+                type="checkbox"
                 class="h-4 w-4"
                 :checked="data.selectedRecordings.includes(recording.id)"
                 @change="e => handleSelectRecording(e, recording)"
               /> -->
             </td>
-            <td>
-              <div class="flex items-center gap-3">
+            <td class="!p-0">
+              <RouterLink
+                :to="{ name: 'recording', params: { recording: recording.id } }"
+                class="flex items-center gap-3 px-4 py-3"
+              >
                 <div class="h-12 w-16 bg-gray-700 rounded overflow-hidden flex-shrink-0">
                   <img :src="recording.thumbnail_path" class="w-full h-full object-cover" loading="lazy" />
                 </div>
                 <span>{{ recording.stream_name }}</span>
-              </div>
+              </RouterLink>
             </td>
             <!-- <td>{{ recording.type }}</td> -->
-            <td>{{ (new Date(recording.start)).toLocaleString() }}</td>
-            <td>{{ Math.round(((new Date(recording.end)).getTime() - (new Date(recording.start)).getTime()) / (1000 * 60)) }} minutes</td>
+            <td class="!p-0">
+              <RouterLink
+                :to="{ name: 'recording', params: { recording: recording.id } }"
+                class="block px-4 py-3"
+              >
+                {{ (new Date(recording.start)).toLocaleString() }}
+              </RouterLink>
+            </td>
+            <td class="!p-0">
+              <RouterLink
+                :to="{ name: 'recording', params: { recording: recording.id } }"
+                class="block px-4 py-3"
+              >
+                {{ Math.round(((new Date(recording.end)).getTime() - (new Date(recording.start)).getTime()) / (1000 * 60)) }} minutes
+              </RouterLink>
+            </td>
           </tr>
         </tbody>
       </table>
