@@ -68,9 +68,10 @@ type Input struct {
 
 	// MotionDetectionMinimumScore is the minimum ffmpeg scdet score required
 	// for a motion entry to appear in the recording's motion detection list.
-	// Defaults to 2.
+	// Defaults to 10.
 	// Raise this if you get way too many false positives.
-	// MotionDetectionMinimumScore int `json:"motion_detection_minimum_score"`
+	// Set to -1 if you want to include every single event.
+	MotionDetectionMinimumScore int `json:"motion_detection_minimum_score"`
 }
 
 // RecordingDirectory contains .mp4 files saved from this stream
@@ -94,6 +95,15 @@ type Config struct {
 	PruneIntervalMinutes int `json:"prune_interval_minutes"`
 	// Inputs is the list of input streams we should record
 	Inputs []Input `json:"inputs"`
+}
+
+func (c *Config) InputByID(id string) *Input {
+	for _, input := range c.Inputs {
+		if input.ID == id {
+			return &input
+		}
+	}
+	return nil
 }
 
 type AValue[T any] struct {
@@ -280,7 +290,15 @@ func main() {
 				defer cancel()
 
 				recordingID := path.Base(work.RecordingPath)
-				m, err := motionTimeline(ctx, work.RecordingPath)
+				minScore := 0
+				input := config.InputByID(work.InputID)
+				if input != nil {
+					minScore = input.MotionDetectionMinimumScore
+				}
+				if minScore == 0 {
+					minScore = 10
+				}
+				m, err := motionTimeline(ctx, work.RecordingPath, minScore)
 				if err != nil {
 					logger.WithError(err).WithField("unit", "recordings-loader").WithField("path", work.RecordingPath).WithField("input", work.InputID).Warn("failed to perform motion detect on old recording, skipping")
 				} else {
@@ -957,7 +975,7 @@ type motion struct {
 // var motionScoreRegex = regexp.MustCompile(`lavfi.scene_score=([\d\.]+)`)
 var motionTimeRegexMpDecimate = regexp.MustCompile(`showinfo.+ pts_time:([\d\.]+)`)
 
-func motionTimeline(ctx context.Context, fpath string) ([]motion, error) {
+func motionTimeline(ctx context.Context, fpath string, minScore int) ([]motion, error) {
 	probeCtx, probeCancel := context.WithTimeout(ctx, time.Minute)
 	defer probeCancel()
 	ffprobe := exec.CommandContext(
@@ -1117,6 +1135,9 @@ func motionTimeline(ctx context.Context, fpath string) ([]motion, error) {
 		score := int((float32(ctr) / float32(fps)) * 100)
 		if score > 100 {
 			score = 100
+		}
+		if score < minScore {
+			continue
 		}
 		ms = append(ms, motion{
 			Time:  second,
