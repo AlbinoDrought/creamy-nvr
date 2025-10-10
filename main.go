@@ -631,6 +631,9 @@ func main() {
 		for _, input := range config.Inputs {
 			err := filepath.Walk(input.RecordingDirectory(), func(fpath string, info fs.FileInfo, err error) error {
 				if err != nil {
+					if os.IsNotExist(err) {
+						return nil // if something is pruned between call to Walk and Walk's call to Stat
+					}
 					return err
 				}
 				if !strings.HasSuffix(fpath, ".mp4") || !strings.Contains(fpath, input.ID) {
@@ -695,6 +698,9 @@ func main() {
 		for _, input := range config.Inputs {
 			err := filepath.Walk(input.RecordingDirectory(), func(fpath string, info fs.FileInfo, err error) error {
 				if err != nil {
+					if os.IsNotExist(err) {
+						return nil // if something is pruned between call to Walk and Walk's call to Stat
+					}
 					return err
 				}
 				if !strings.HasSuffix(fpath, ".mp4") || !strings.Contains(fpath, input.ID) {
