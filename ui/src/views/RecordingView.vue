@@ -2,7 +2,7 @@
 import { computed, reactive, ref, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStreamStore } from '@/stores/stream';
-import { ArrowLeft, Download, Maximize } from 'lucide-vue-next';
+import { ArrowLeft, Clock, Download, Maximize } from 'lucide-vue-next';
 
 const router = useRouter();
 
@@ -84,6 +84,14 @@ const toggleFullscreen = () => {
     </div>
 
     <div class="absolute top-4 right-4 z-10 flex gap-2">
+      <button
+        v-if="recording"
+        @click="router.push({ name: 'camera-timeline', params: { streamId: recording.stream_id } })"
+        class="bg-gray-900/80 hover:bg-gray-900 text-white p-3 rounded-md cursor-pointer transition-colors backdrop-blur-sm"
+        title="Camera Timeline"
+      >
+        <Clock :size="20" />
+      </button>
       <a
         v-if="recording"
         :href="recording.path"

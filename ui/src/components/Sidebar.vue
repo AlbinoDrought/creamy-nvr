@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { Camera, Map, Video, ListVideo, Clock, AlertTriangle, Users, Settings } from 'lucide-vue-next';
+import { useStreamStore } from '@/stores/stream';
+import { computed } from 'vue';
 
 const version = import.meta.env.VERSION || 'Development';
+const streamStore = useStreamStore();
+
+const firstCameraId = computed(() => {
+  return streamStore.streams.length > 0 ? streamStore.streams[0].id : '';
+});
 
 const props = defineProps<{
   mobileOpen?: boolean;
@@ -51,18 +58,14 @@ const handleLinkClick = () => {
           <span class="text-xs uppercase font-medium">Live View</span>
         </RouterLink>
 
-        <!-- <div class="relative">
-          <RouterLink
-            to="/timeline"
-            class="sidebar-link"
-          >
-            <Clock :size="20" />
-            <span class="text-xs uppercase font-medium">Timeline</span>
-          </RouterLink>
-          <div class="absolute top-0 right-2 bg-yellow-500 text-black px-1.5 rounded-sm text-[10px] font-bold">
-            BETA
-          </div>
-        </div> -->
+        <RouterLink
+          :to="{ name: 'camera-timeline', params: { streamId: firstCameraId || '-' } }"
+          class="sidebar-link"
+          @click="handleLinkClick"
+        >
+          <Clock :size="20" />
+          <span class="text-xs uppercase font-medium">Timeline</span>
+        </RouterLink>
 
         <RouterLink
           to="/recordings"

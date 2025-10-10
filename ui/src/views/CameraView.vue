@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStreamStore } from '@/stores/stream';
 import VideoStream from '@/components/VideoStream.vue';
-import { ArrowLeft, Maximize, Volume2, VolumeX } from 'lucide-vue-next';
+import { ArrowLeft, Clock, Maximize, Volume2, VolumeX } from 'lucide-vue-next';
 
 const router = useRouter();
 const streamStore = useStreamStore();
@@ -46,6 +46,13 @@ const toggleFullscreen = () => {
     </div>
 
     <div class="absolute top-4 right-4 z-10 flex gap-2">
+      <button
+        @click="router.push({ name: 'camera-timeline', params: { streamId } })"
+        class="bg-gray-900/80 hover:bg-gray-900 text-white p-3 rounded-md cursor-pointer transition-colors backdrop-blur-sm"
+        title="Timeline View"
+      >
+        <Clock :size="20" />
+      </button>
       <button
         @click="toggleMute"
         class="bg-gray-900/80 hover:bg-gray-900 text-white p-3 rounded-md cursor-pointer transition-colors backdrop-blur-sm"
