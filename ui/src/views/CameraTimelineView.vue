@@ -372,9 +372,9 @@ const handleVideoEnded = () => {
               </button>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2 sm:gap-3 text-sm">
+            <div v-if="streamStore.streams.length > 0" class="flex flex-wrap items-center gap-2 sm:gap-3 text-sm">
               <select
-                v-if="streamStore.streams.length > 0"
+                v-once
                 :value="streamId"
                 @change="router.push({ name: 'camera-timeline', params: { streamId: ($event.target as HTMLSelectElement).value } })"
                 class="bg-gray-800 text-white px-2 sm:px-3 py-1 rounded text-sm border border-gray-700"
