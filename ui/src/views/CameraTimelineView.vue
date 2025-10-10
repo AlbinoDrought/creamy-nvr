@@ -353,7 +353,7 @@ const handleVideoEnded = () => {
         <!-- Multi-Recording Timeline -->
         <div class="bg-black text-white px-6 py-4">
           <!-- Time Window Controls -->
-          <div class="flex items-center justify-between mb-3 gap-4">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 gap-3">
             <div class="flex items-center gap-2">
               <button
                 @click="goToPreviousWindow"
@@ -372,12 +372,12 @@ const handleVideoEnded = () => {
               </button>
             </div>
 
-            <div class="flex items-center gap-3 flex-shrink-0">
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3 text-sm">
               <select
                 v-if="streamStore.streams.length > 0"
                 :value="streamId"
                 @change="router.push({ name: 'camera-timeline', params: { streamId: ($event.target as HTMLSelectElement).value } })"
-                class="bg-gray-800 text-white px-3 py-1 rounded text-sm border border-gray-700"
+                class="bg-gray-800 text-white px-2 sm:px-3 py-1 rounded text-sm border border-gray-700"
               >
                 <option v-once v-for="s in streamStore.streams" :key="s.id" :value="s.id">
                   {{ s.name }}
@@ -386,7 +386,7 @@ const handleVideoEnded = () => {
               <span class="text-sm text-gray-400 whitespace-nowrap">{{ formatDate(windowStartTime) }}</span>
               <select
                 v-model.number="data.timeWindowIndex"
-                class="bg-gray-800 text-white px-3 py-1 rounded text-sm border border-gray-700"
+                class="bg-gray-800 text-white px-2 sm:px-3 py-1 rounded text-sm border border-gray-700"
               >
                 <option v-once v-for="(option, idx) in TIME_WINDOW_OPTIONS" :key="`tw-${idx}`" :value="idx">
                   {{ option.label }}
