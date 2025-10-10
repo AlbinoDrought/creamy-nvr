@@ -241,7 +241,8 @@ const getMotionLevel = (recording: types.Recording): { level: string, display: s
     </div> -->
     
     <div class="flex-1 overflow-x-auto">
-      <table class="w-full nvr-table min-w-[700px]">
+      <!-- Desktop table view -->
+      <table class="w-full nvr-table min-w-[700px] hidden md:table">
         <thead>
           <tr>
             <th class="w-6">
@@ -307,6 +308,38 @@ const getMotionLevel = (recording: types.Recording): { level: string, display: s
           </tr>
         </tbody>
       </table>
+
+      <!-- Mobile card view -->
+      <div class="md:hidden space-y-3 p-4 pt-[60px]">
+        <RouterLink
+          v-for="recording in streamStore.recordings"
+          :key="recording.id"
+          :to="{ name: 'recording', params: { recording: recording.id } }"
+          class="block bg-white rounded-lg border border-gray-200 overflow-hidden hover:bg-gray-50 transition-colors"
+        >
+          <div class="flex gap-3 p-3">
+            <div class="h-16 w-20 bg-gray-700 rounded overflow-hidden flex-shrink-0">
+              <img :src="recording.thumbnail_path" class="w-full h-full object-cover" loading="lazy" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-gray-900 mb-1">{{ recording.stream_name }}</div>
+              <div class="text-sm text-gray-600 mb-2">
+                {{ (new Date(recording.start)).toLocaleDateString() }}
+                {{ (new Date(recording.start)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+              </div>
+              <div class="flex items-center gap-2 text-xs text-gray-500">
+                <span>{{ Math.round(((new Date(recording.end)).getTime() - (new Date(recording.start)).getTime()) / (1000 * 60)) }} min</span>
+                <span class="text-gray-400">•</span>
+                <span
+                  :class="['inline-block px-2 py-0.5 rounded-full font-medium', getMotionLevel(recording).color]"
+                >
+                  {{ getMotionLevel(recording).display }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </RouterLink>
+      </div>
     </div>
   </div>
 </template>
