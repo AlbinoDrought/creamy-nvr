@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { reactive, computed } from 'vue';
 import { useStreamStore } from '@/stores/stream';
+import * as types from '@/stores/streamTypes';
 
 const streamStore = useStreamStore();
 
@@ -17,6 +18,98 @@ const data = reactive({
 
   // selectedRecordings: [],
 });
+
+// Calculate motion density score for a recording
+const calculateMotionScore = (recording: types.Recording): number => {
+  if (!recording.performed_motion_detect || !recording.motion.length) {
+    return 0;
+  }
+
+  const duration = ((new Date(recording.end)).getTime() - (new Date(recording.start)).getTime()) / (1000 * 60); // minutes
+  const avgScore = recording.motion.reduce((sum, m) => sum + m.s, 0) / recording.motion.length;
+  const eventsPerMinute = recording.motion.length / duration;
+
+  // Combine frequency and intensity
+  const combinedScore = (eventsPerMinute * 2) + (avgScore / 10);
+
+  return combinedScore;
+};
+
+// Calculate per-camera baselines and global percentiles
+const motionMetrics = computed(() => {
+  const byCamera: Record<string, { scores: number[], mean: number, stdDev: number }> = {};
+  const allScores: number[] = [];
+
+  streamStore.recordings.forEach(rec => {
+    const score = calculateMotionScore(rec);
+    if (score === 0) return; // Skip recordings with no motion
+
+    if (!byCamera[rec.stream_id]) {
+      byCamera[rec.stream_id] = { scores: [], mean: 0, stdDev: 0 };
+    }
+    byCamera[rec.stream_id].scores.push(score);
+    allScores.push(score);
+  });
+
+  // Calculate stats per camera
+  Object.values(byCamera).forEach(camera => {
+    const mean = camera.scores.reduce((a, b) => a + b, 0) / camera.scores.length;
+    const variance = camera.scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / camera.scores.length;
+    camera.mean = mean;
+    camera.stdDev = Math.sqrt(variance);
+  });
+
+  // Calculate global percentiles as fallback
+  allScores.sort((a, b) => a - b);
+  const p33 = allScores[Math.floor(allScores.length * 0.33)] || 0;
+  const p66 = allScores[Math.floor(allScores.length * 0.66)] || 0;
+
+  return { byCamera, globalPercentiles: { p33, p66 } };
+});
+
+// Determine motion level for a recording
+const getMotionLevel = (recording: types.Recording): { level: string, display: string, color: string } => {
+  if (!recording.performed_motion_detect) {
+    return { level: 'unknown', display: '-', color: 'bg-gray-300 text-gray-600' };
+  }
+
+  const score = calculateMotionScore(recording);
+
+  if (score === 0) {
+    return { level: 'none', display: 'None', color: 'bg-gray-300 text-gray-600' };
+  }
+
+  const cameraStats = motionMetrics.value.byCamera[recording.stream_id];
+  let level: string;
+
+  // Use per-camera if we have enough data (5+ recordings)
+  if (cameraStats && cameraStats.scores.length >= 5) {
+    if (score < cameraStats.mean - 0.3 * cameraStats.stdDev) {
+      level = 'low';
+    } else if (score < cameraStats.mean + 0.5 * cameraStats.stdDev) {
+      level = 'medium';
+    } else {
+      level = 'high';
+    }
+  } else {
+    // Fallback to global percentiles
+    if (score < motionMetrics.value.globalPercentiles.p33) {
+      level = 'low';
+    } else if (score < motionMetrics.value.globalPercentiles.p66) {
+      level = 'medium';
+    } else {
+      level = 'high';
+    }
+  }
+
+  const levelMap = {
+    low: { display: 'Low', color: 'bg-green-200 text-green-800' },
+    medium: { display: 'Medium', color: 'bg-yellow-200 text-yellow-800' },
+    high: { display: 'High', color: 'bg-red-200 text-red-800' },
+  };
+
+  return { level, ...levelMap[level as keyof typeof levelMap] };
+};
 
 // const search = () => {
 //   throw new Error('todo');
@@ -148,12 +241,13 @@ const data = reactive({
     </div> -->
     
     <div class="flex-1 overflow-x-auto">
-      <table class="w-full nvr-table min-w-[700px]">
+      <!-- Desktop table view -->
+      <table class="w-full nvr-table min-w-[700px] hidden md:table">
         <thead>
           <tr>
             <th class="w-6">
-              <!-- <input 
-                type="checkbox" 
+              <!-- <input
+                type="checkbox"
                 class="h-4 w-4"
                 onChange={handleSelectAll}
                 checked={selectedRecordings.length === recordingData.length && recordingData.length > 0}
@@ -163,6 +257,7 @@ const data = reactive({
             <!-- <th class="text-sm">TYPE</th> -->
             <th class="text-sm">Date</th>
             <th class="text-sm">Duration</th>
+            <th class="text-sm">Motion</th>
           </tr>
         </thead>
         <tbody>
@@ -203,9 +298,48 @@ const data = reactive({
                 {{ Math.round(((new Date(recording.end)).getTime() - (new Date(recording.start)).getTime()) / (1000 * 60)) }} minutes
               </RouterLink>
             </td>
+            <td>
+              <span
+                :class="['inline-block px-2 py-1 rounded-full text-xs font-medium', getMotionLevel(recording).color]"
+              >
+                {{ getMotionLevel(recording).display }}
+              </span>
+            </td>
           </tr>
         </tbody>
       </table>
+
+      <!-- Mobile card view -->
+      <div class="md:hidden space-y-3 p-4 pt-[60px]">
+        <RouterLink
+          v-for="recording in streamStore.recordings"
+          :key="recording.id"
+          :to="{ name: 'recording', params: { recording: recording.id } }"
+          class="block bg-white rounded-lg border border-gray-200 overflow-hidden hover:bg-gray-50 transition-colors"
+        >
+          <div class="flex gap-3 p-3">
+            <div class="h-16 w-20 bg-gray-700 rounded overflow-hidden flex-shrink-0">
+              <img :src="recording.thumbnail_path" class="w-full h-full object-cover" loading="lazy" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-gray-900 mb-1">{{ recording.stream_name }}</div>
+              <div class="text-sm text-gray-600 mb-2">
+                {{ (new Date(recording.start)).toLocaleDateString() }}
+                {{ (new Date(recording.start)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+              </div>
+              <div class="flex items-center gap-2 text-xs text-gray-500">
+                <span>{{ Math.round(((new Date(recording.end)).getTime() - (new Date(recording.start)).getTime()) / (1000 * 60)) }} min</span>
+                <span class="text-gray-400">•</span>
+                <span
+                  :class="['inline-block px-2 py-0.5 rounded-full font-medium', getMotionLevel(recording).color]"
+                >
+                  {{ getMotionLevel(recording).display }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </RouterLink>
+      </div>
     </div>
   </div>
 </template>

@@ -57,12 +57,13 @@ streamStore.loadStreams();
     </div> -->
     
     <div class="flex-1 px-4 pb-4 overflow-x-auto">
-      <table class="w-full nvr-table min-w-[600px]">
+      <!-- Desktop table view -->
+      <table class="w-full nvr-table min-w-[600px] hidden md:table">
         <thead>
           <tr>
             <th class="w-6">
-              <!-- <input 
-                type="checkbox" 
+              <!-- <input
+                type="checkbox"
                 class="h-4 w-4"
                 @change="handleSelectAll"
                 :checked="data.selectedCameras.length === cameraData.length && cameraData.length > 0"
@@ -125,6 +126,34 @@ streamStore.loadStreams();
             </tr>
         </tbody>
       </table>
+
+      <!-- Mobile card view -->
+      <div class="md:hidden space-y-3 pt-[60px]">
+        <RouterLink
+          v-for="stream in streamStore.streams"
+          :key="stream.id"
+          :to="{ name: 'camera', params: { streamId: stream.id } }"
+          class="block bg-white rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition-colors"
+        >
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span :class="['h-4 w-4 rounded-full flex-shrink-0', { 'bg-green-500': stream.active && !stream.in_err, 'bg-yellow-500': stream.active && stream.in_err, 'bg-red-500': !stream.active }]"></span>
+              <div class="font-medium text-gray-900">{{ stream.name }}</div>
+            </div>
+            <div class="nvr-button flex items-center gap-1 text-xs px-2 py-1">
+              <Video :size="12" />
+              <span>Live</span>
+            </div>
+          </div>
+          <div class="text-sm text-gray-600">
+            <div class="text-xs text-gray-500 mb-1">Last Segment</div>
+            <div>
+              {{ (new Date(stream.last_recording)).toLocaleDateString() }}
+              {{ (new Date(stream.last_recording)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+            </div>
+          </div>
+        </RouterLink>
+      </div>
     </div>
   </div>
 </template>
