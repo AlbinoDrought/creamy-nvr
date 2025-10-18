@@ -41,6 +41,10 @@ type Input struct {
 	// URL is the connection string for this stream, like "rtsp://user:pass@host:1234/path/here?parameters=sample"
 	URL string `json:"url"`
 
+	// ExtraFFMPEGArgs passed after each `-f {format}` section.
+	// As an example, specify `"extra_ffmpeg_args": "-tag:v hvc1"` to make your hev1 cameras playable on iOS
+	ExtraFFMPEGArgs string `json:"extra_ffmpeg_args"`
+
 	// RecordingAgeLimitHours is the amount of hours of recordings to keep.
 	// If 0, disabled.
 	// If 1, keep recordings from the last 60 minutes.
@@ -934,6 +938,7 @@ func record(ctx context.Context, stream *Stream) {
 			cmd.Env,
 			"RTSP_SOURCE="+stream.Input.URL,
 			"RTSP_NAME="+stream.Input.ID,
+			"RTSP_EXTRA_ARGS="+stream.Input.ExtraFFMPEGArgs,
 		)
 		// ffmpeg is writing all output to stderr for me
 		cmd.Stderr = &OpeningForWritingWriter{

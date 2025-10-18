@@ -12,6 +12,8 @@ SOURCE="$RTSP_SOURCE"
 # some reasonably-unique name
 NAME=${RTSP_NAME:-cctv}
 
+EXTRA_ARGS=${RTSP_EXTRA_ARGS:-}
+
 # ffmpeg doesn't autocreate directories
 mkdir -p "media/$NAME/stream/segments" # stream directory is 100% temporary and can be removed for cleaning
 mkdir -p "media/$NAME/archive" # archive directory is more permanent, should only remove old files
@@ -33,7 +35,7 @@ ffmpeg -loglevel level \
         -rtsp_transport tcp \
         -re \
         -i "$SOURCE" \
-        -f hls \
+        -f hls $EXTRA_ARGS \
         -fps_mode passthrough \
         -copyts -vcodec copy -acodec copy \
         -movflags frag_keyframe+empty_moov \
@@ -45,7 +47,7 @@ ffmpeg -loglevel level \
         -strftime 1 \
         -hls_segment_filename "media/$NAME/stream/segments/$NAME-%06d-%F-%H-%M-%S.ts" \
         "media/$NAME/stream/$NAME.m3u8" \
-        -f segment \
+        -f segment $EXTRA_ARGS \
         -segment_time $SEGMENT_TIME \
         -segment_atclocktime 1 \
         -segment_wrap $SEGMENT_WRAP \
