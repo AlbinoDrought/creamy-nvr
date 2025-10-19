@@ -3,7 +3,8 @@ import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStreamStore } from '@/stores/stream';
 import * as types from '@/stores/streamTypes';
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, Maximize } from 'lucide-vue-next';
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, Maximize, Scissors } from 'lucide-vue-next';
+import VideoClipper from '@/components/VideoClipper.vue';
 
 const router = useRouter();
 const streamStore = useStreamStore();
@@ -26,19 +27,25 @@ const cameraRecordings = computed(() => {
 
 // Time window configuration (in milliseconds)
 const TIME_WINDOW_OPTIONS = [
-  { label: '3 hours', duration: 3 * 60 * 60 * 1000 },
-  { label: '6 hours', duration: 6 * 60 * 60 * 1000 },
+  { label: '1 hour',   duration: 1  * 60 * 60 * 1000 },
+  { label: '3 hours',  duration: 3  * 60 * 60 * 1000 },
+  { label: '6 hours',  duration: 6  * 60 * 60 * 1000 },
   { label: '12 hours', duration: 12 * 60 * 60 * 1000 },
   { label: '24 hours', duration: 24 * 60 * 60 * 1000 },
 ];
 
 const data = reactive({
-  timeWindowIndex: 0, // Index into TIME_WINDOW_OPTIONS
+  timeWindowIndex: 1, // Index into TIME_WINDOW_OPTIONS
   windowEndTime: Date.now(), // End of the time window (defaults to now)
   selectedRecordingId: null as string | null,
   sliderPos: 0,
   sliderPosInterval: null as ReturnType<typeof setInterval> | null,
   seekToPositionOnLoad: null as number | null, // Position to seek to when recording loads
+  // Clip selection state
+  clipSelectionMode: false,
+  clipStart: null as number | null, // Unix timestamp in milliseconds
+  clipEnd: null as number | null, // Unix timestamp in milliseconds
+  showClipperModal: false,
 });
 
 const timeWindow = computed(() => TIME_WINDOW_OPTIONS[data.timeWindowIndex]);
@@ -150,6 +157,30 @@ const handleTimelineClick = (event: MouseEvent) => {
     clickedTime = nearestMotionTime;
   }
 
+  // Handle clip selection mode (shift+click)
+  if (event.shiftKey || data.clipSelectionMode) {
+    if (data.clipStart === null) {
+      // First click - set start point
+      data.clipStart = clickedTime;
+      data.clipEnd = null;
+    } else if (data.clipEnd === null) {
+      // Second click - set end point
+      if (clickedTime > data.clipStart) {
+        data.clipEnd = clickedTime;
+      } else {
+        // If clicked before start, swap them
+        data.clipEnd = data.clipStart;
+        data.clipStart = clickedTime;
+      }
+    } else {
+      // Already have both points - reset and start new selection
+      data.clipStart = clickedTime;
+      data.clipEnd = null;
+    }
+    return;
+  }
+
+  // Normal timeline navigation (not in clip selection mode)
   // Find recording that contains this time
   const recordingAtTime = visibleRecordings.value.find(r => {
     const recStart = new Date(r.start).getTime();
@@ -284,6 +315,55 @@ const handleVideoEnded = () => {
     data.sliderPos = 0;
   }
 };
+
+// Clip selection helpers
+const toggleClipSelectionMode = () => {
+  data.clipSelectionMode = !data.clipSelectionMode;
+  if (!data.clipSelectionMode) {
+    // Exiting clip selection mode - clear selection
+    data.clipStart = null;
+    data.clipEnd = null;
+  }
+};
+
+const clipRecordings = computed(() => {
+  if (data.clipStart === null || data.clipEnd === null) return [];
+
+  return cameraRecordings.value.filter(r => {
+    const recStart = new Date(r.start).getTime();
+    const recEnd = new Date(r.end).getTime();
+    // Recording overlaps with clip if it starts before clip ends AND ends after clip starts
+    return recStart < data.clipEnd! && recEnd > data.clipStart!;
+  });
+});
+
+const canCreateClip = computed(() => {
+  return data.clipStart !== null && data.clipEnd !== null && clipRecordings.value.length > 0;
+});
+
+const getClipRangeStyle = computed(() => {
+  if (!canCreateClip.value) return { display: 'none' };
+
+  const left = ((data.clipStart! - windowStartTime.value) / timeWindow.value.duration) * 100;
+  const width = ((data.clipEnd! - data.clipStart!) / timeWindow.value.duration) * 100;
+
+  return {
+    left: `${Math.max(0, left)}%`,
+    width: `${Math.min(100 - Math.max(0, left), width)}%`,
+  };
+});
+
+const openClipperModal = () => {
+  if (!canCreateClip.value) return;
+  data.showClipperModal = true;
+};
+
+const closeClipperModal = () => {
+  data.showClipperModal = false;
+  data.clipStart = null;
+  data.clipEnd = null;
+  data.clipSelectionMode = false;
+};
 </script>
 
 <template>
@@ -300,6 +380,16 @@ const handleVideoEnded = () => {
     </div>
 
     <div class="absolute top-4 right-4 z-10 flex gap-2">
+      <button
+        @click="toggleClipSelectionMode"
+        :class="[
+          'bg-gray-900/80 hover:bg-gray-900 text-white p-3 rounded-md cursor-pointer transition-colors backdrop-blur-sm',
+          data.clipSelectionMode ? 'ring-2 ring-blue-500' : ''
+        ]"
+        :title="data.clipSelectionMode ? 'Exit Clip Selection Mode' : 'Create Clip (Shift+Click to select range)'"
+      >
+        <Scissors :size="20" />
+      </button>
       <a
         v-if="selectedRecording"
         :href="selectedRecording.path"
@@ -409,6 +499,15 @@ const handleVideoEnded = () => {
               ></div>
             </div>
 
+            <!-- Clip Selection Range -->
+            <div
+              v-if="canCreateClip"
+              class="clip-range"
+              :style="getClipRangeStyle"
+              @click.stop="openClipperModal"
+              title="Click to create clip"
+            ></div>
+
             <!-- Motion Markers -->
             <div class="motion-markers">
               <template v-for="recording in visibleRecordings" :key="recording.id">
@@ -445,6 +544,34 @@ const handleVideoEnded = () => {
                 :style="{ left: `${label.position}%` }"
               >
                 {{ label.time }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Clip Selection Info -->
+          <div v-if="data.clipSelectionMode || canCreateClip" class="mt-3 text-sm">
+            <div v-if="!canCreateClip" class="text-gray-400">
+              {{ data.clipStart ? 'Click to set end time' : 'Click to set start time' }}
+            </div>
+            <div v-else class="flex items-center justify-between gap-4">
+              <div class="text-gray-300">
+                Clip: {{ new Date(data.clipStart!).toLocaleTimeString() }} - {{ new Date(data.clipEnd!).toLocaleTimeString() }}
+                ({{ Math.round((data.clipEnd! - data.clipStart!) / 1000 / 60) }}m {{ Math.round(((data.clipEnd! - data.clipStart!) / 1000) % 60) }}s)
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  @click="closeClipperModal"
+                  class="px-3 py-1 text-gray-300 hover:text-white transition-colors"
+                >
+                  <span>Cancel</span>
+                </button>
+                <button
+                  @click="openClipperModal"
+                  class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors flex items-center gap-1"
+                >
+                  <Scissors :size="14" />
+                  <span>Create Clip</span>
+                </button>
               </div>
             </div>
           </div>
@@ -488,6 +615,15 @@ const handleVideoEnded = () => {
     <div v-if="!stream" class="flex-1 flex items-center justify-center text-white">
       <p>Camera not found</p>
     </div>
+
+    <!-- Video Clipper Modal -->
+    <VideoClipper
+      :visible="data.showClipperModal"
+      :clip-start="data.clipStart || 0"
+      :clip-end="data.clipEnd || 0"
+      :recordings="clipRecordings"
+      @close="closeClipperModal"
+    />
   </div>
 </template>
 
@@ -520,6 +656,22 @@ const handleVideoEnded = () => {
 
 .recording-segment--selected {
   background-color: #3b82f6;
+}
+
+.clip-range {
+  position: absolute;
+  top: 0;
+  height: 30px;
+  background-color: rgba(59, 130, 246, 0.3);
+  border: 2px solid #3b82f6;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  z-index: 5;
+}
+
+.clip-range:hover {
+  background-color: rgba(59, 130, 246, 0.4);
 }
 
 .motion-markers {

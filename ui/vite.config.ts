@@ -17,6 +17,9 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  optimizeDeps: {
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util']
+  },
   server: {
     proxy: {
       '/api': apiURL,

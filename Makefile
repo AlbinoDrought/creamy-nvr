@@ -2,7 +2,7 @@ all: ui creamy-nvr
 
 .PHONY: ui
 ui: 
-	cd ui && npm ci && npm run build
+	cd ui && npm ci && cp node_modules/@ffmpeg/core/dist/esm/* public/ffmpeg/ && npm run build
 
 .PHONY: creamy-nvr
 creamy-nvr:
