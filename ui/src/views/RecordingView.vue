@@ -120,6 +120,7 @@ const toggleFullscreen = () => {
             muted
             controls
             autoplay
+            playsinline
           />
 
           <div class="absolute bottom-16 left-4 z-20 bg-gray-900/90 text-white px-4 py-2 rounded-md backdrop-blur-sm max-w-[calc(100%-2rem)]">

@@ -67,5 +67,5 @@ watch(() => props.muted, (newMuted) => {
 </script>
 
 <template>
-  <video ref="video" :muted="muted" preload="none" controls />
+  <video ref="video" :muted="muted" preload="none" controls playsinline />
 </template>

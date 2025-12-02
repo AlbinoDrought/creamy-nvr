@@ -421,6 +421,7 @@ const closeClipperModal = () => {
               muted
               controls
               autoplay
+              playsinline
               @ended="handleVideoEnded"
               @loadedmetadata="handleVideoLoadedMetadata"
             />
